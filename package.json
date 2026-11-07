@@ -2,6 +2,11 @@
   "name": "sql-to-mermaid",
   "version": "0.1.0",
   "private": true,
+  "homepage": "https://github.com/santy123371/sql-to-mermaid",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/santy123371/sql-to-mermaid.git"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",

@@ -2,17 +2,23 @@
 
 > Transforma esquemas SQL (`init.sql`, DDL) en diagramas de clases UML limpios y compatibles con **Mermaid.js** (`.mmd`) al instante. 100% gratuito y de código abierto.
 
+[![GitHub stars](https://img.shields.io/github/stars/santy123371/sql-to-mermaid?style=for-the-badge&logo=github&color=gold)](https://github.com/santy123371/sql-to-mermaid/stargazers)
+[![GitHub forks](https://img.shields.io/github/forks/santy123371/sql-to-mermaid?style=for-the-badge&logo=github&color=blue)](https://github.com/santy123371/sql-to-mermaid/network/members)
 [![Next.js](https://img.shields.io/badge/Next.js-16-black?style=for-the-badge&logo=next.js)](https://nextjs.org/)
 [![React](https://img.shields.io/badge/React-19-blue?style=for-the-badge&logo=react)](https://react.dev/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5-blue?style=for-the-badge&logo=typescript)](https://www.typescriptlang.org/)
 [![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-v4-38B2AC?style=for-the-badge&logo=tailwind-css)](https://tailwindcss.com/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg?style=for-the-badge)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg?style=for-the-badge)](./LICENSE)
 
 ---
 
 ## ⭐ ¡Apóyanos con una Estrella!
 
-Si esta herramienta te ayuda a ahorrar tiempo documentando tus bases de datos y arquitecturas de software, **por favor dale una estrella (Star ⭐) a este repositorio en GitHub**. ¡Tu apoyo nos motiva a seguir manteniéndolo y agregando nuevas funciones para toda la comunidad!
+Si esta herramienta te ayuda a ahorrar tiempo documentando tus bases de datos y arquitecturas de software, **por favor dale una estrella (Star ⭐) a este repositorio en GitHub**:
+
+👉 **[https://github.com/santy123371/sql-to-mermaid](https://github.com/santy123371/sql-to-mermaid)**
+
+¡Tu apoyo nos motiva a seguir manteniéndolo y agregando nuevas funciones para toda la comunidad!
 
 ---
 
@@ -96,6 +102,7 @@ SQL-to-mermaid/
 │   └── lib/
 │       └── sql-parser.ts        # Motor de análisis DDL y generador Mermaid
 ├── public/                      # Assets estáticos
+├── LICENSE                      # Licencia MIT
 └── README.md                    # Documentación del proyecto
 ```
 
@@ -104,7 +111,7 @@ SQL-to-mermaid/
 ## 🤝 Contribuciones
 
 ¡Las contribuciones son siempre bienvenidas! Si tienes ideas para soportar más dialectos SQL o mejorar la visualización:
-1. Haz un Fork del proyecto.
+1. Haz un Fork del proyecto en [GitHub](https://github.com/santy123371/sql-to-mermaid).
 2. Crea tu rama con la nueva función (`git checkout -b feature/nueva-funcion`).
 3. Haz tus commits (`git commit -m 'feat: agregar soporte para nueva sintaxis'`).
 4. Haz Push a la rama (`git push origin feature/nueva-funcion`).
@@ -114,4 +121,4 @@ SQL-to-mermaid/
 
 ## 📄 Licencia
 
-Este proyecto está bajo la licencia [MIT](LICENSE). Siéntete libre de usarlo en tus proyectos personales o profesionales. ¡No olvides dejar tu ⭐ en GitHub!
+Este proyecto está bajo la licencia [MIT](./LICENSE). Siéntete libre de usarlo en tus proyectos personales o profesionales. ¡No olvides dejar tu ⭐ en [GitHub](https://github.com/santy123371/sql-to-mermaid)!
