@@ -82,36 +82,79 @@ export function parseSqlSchema(sqlContent: string, options: ParserOptions = {}):
     .replace(/--.*$/gm, '')
     .replace(/#.*$/gm, '');
 
-  // 2. Intelligent DML Filter: Ignore data insertions, updates, drops and session variables
-  // This allows processing full database dumps (.sql) without choking on data rows
+  // 2. Intelligent DML Filter: Ignore standalone data insertions, updates, drops, etc.
+  // Must only match standalone statements (anchored to start of line or semicolon),
+  // NEVER clauses like "ON UPDATE CASCADE" or "ON DELETE SET NULL" inside CREATE TABLE!
   cleaned = cleaned
-    .replace(/INSERT\s+(?:IGNORE\s+|OR\s+IGNORE\s+)?INTO[\s\S]*?;/gi, '')
-    .replace(/REPLACE\s+INTO[\s\S]*?;/gi, '')
-    .replace(/UPDATE\s+[\s\S]*?;/gi, '')
-    .replace(/DELETE\s+FROM[\s\S]*?;/gi, '')
-    .replace(/DROP\s+TABLE[\s\S]*?;/gi, '')
-    .replace(/LOCK\s+TABLES[\s\S]*?;/gi, '')
-    .replace(/UNLOCK\s+TABLES;?/gi, '')
-    .replace(/SET\s+[^;]+;/gi, '')
-    .replace(/USE\s+[^;]+;/gi, '');
+    .replace(/(?:^|;)\s*INSERT\s+(?:IGNORE\s+|OR\s+IGNORE\s+)?INTO\s+[\s\S]*?;/gi, ';')
+    .replace(/(?:^|;)\s*REPLACE\s+INTO\s+[\s\S]*?;/gi, ';')
+    .replace(/(?:^|;)\s*UPDATE\s+(?:LOW_PRIORITY\s+|IGNORE\s+)?[\s\S]*?;/gi, ';')
+    .replace(/(?:^|;)\s*DELETE\s+FROM\s+[\s\S]*?;/gi, ';')
+    .replace(/(?:^|;)\s*DROP\s+(?:DATABASE|TABLE|VIEW|PROCEDURE|FUNCTION|TRIGGER)\s+[^;]*;/gi, ';')
+    .replace(/(?:^|;)\s*CREATE\s+DATABASE\s+[^;]*;/gi, ';')
+    .replace(/(?:^|;)\s*SELECT\s+[\s\S]*?;/gi, ';')
+    .replace(/(?:^|;)\s*LOCK\s+TABLES\s+[\s\S]*?;/gi, ';')
+    .replace(/(?:^|;)\s*UNLOCK\s+TABLES\s*;?/gi, ';')
+    .replace(/(?:^|;)\s*SET\s+[^;]+;/gi, ';')
+    .replace(/(?:^|;)\s*USE\s+[^;]+;/gi, ';');
 
-  // 3. Regex to match CREATE TABLE statements
-  const createTableRegex = /CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(?:[`"\[]?(\w+)[`"\]]?\.)?[`"\[]?(\w+)[`"\]]?\s*\(([\s\S]*?)\)(?:\s*ENGINE\s*=\s*\w+)?(?:\s*DEFAULT\s+CHARSET\s*=\s*\w+)?(?:\s*COLLATE\s*=\s*\w+)?\s*;/gi;
+  // 3. Extract CREATE TABLE statements with balanced parenthesis parsing
+  // Regular expressions cannot balance nested parentheses like VARCHAR(120), DECIMAL(10,2), or DATETIME(6).
+  // We locate "CREATE TABLE name (" and scan character-by-character to find the true closing ")".
+  const createTableKeywordRegex = /\bCREATE\s+(?:TEMPORARY\s+)?TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(?:[`"\[]?(\w+)[`"\]]?\.)?[`"\[]?(\w+)[`"\]]?\s*\(/gi;
 
   let match: RegExpExecArray | null;
-  while ((match = createTableRegex.exec(cleaned)) !== null) {
+  while ((match = createTableKeywordRegex.exec(cleaned)) !== null) {
     const rawTableName = sanitizeIdentifier(match[2] || match[1]);
-    const body = match[3];
+    const startIndex = createTableKeywordRegex.lastIndex; // right after the first '('
 
-    if (!rawTableName) continue;
+    let depth = 1;
+    let i = startIndex;
+    let inSingleQuote = false;
+    let inDoubleQuote = false;
+    let inBacktick = false;
 
-    const className = pascalCase ? toPascalCase(rawTableName) : rawTableName;
-    const columns: ColumnInfo[] = [];
-    const foreignKeys: ForeignKeyInfo[] = [];
-    const pkColumns = new Set<string>();
-    const uniqueColumns = new Set<string>();
+    while (i < cleaned.length && depth > 0) {
+      const char = cleaned[i];
+      const prevChar = i > 0 ? cleaned[i - 1] : '';
 
-    const lines = body.split('\n');
+      if (char === "'" && prevChar !== '\\' && !inDoubleQuote && !inBacktick) {
+        inSingleQuote = !inSingleQuote;
+      } else if (char === '"' && prevChar !== '\\' && !inSingleQuote && !inBacktick) {
+        inDoubleQuote = !inDoubleQuote;
+      } else if (char === '`' && !inSingleQuote && !inDoubleQuote) {
+        inBacktick = !inBacktick;
+      } else if (!inSingleQuote && !inDoubleQuote && !inBacktick) {
+        if (char === '(') {
+          depth++;
+        } else if (char === ')') {
+          depth--;
+          if (depth === 0) {
+            break;
+          }
+        }
+      }
+      i++;
+    }
+
+    if (depth === 0) {
+      const body = cleaned.substring(startIndex, i);
+      const semicolonIndex = cleaned.indexOf(';', i);
+      if (semicolonIndex !== -1) {
+        createTableKeywordRegex.lastIndex = semicolonIndex + 1;
+      } else {
+        createTableKeywordRegex.lastIndex = i + 1;
+      }
+
+      if (!rawTableName) continue;
+
+      const className = pascalCase ? toPascalCase(rawTableName) : rawTableName;
+      const columns: ColumnInfo[] = [];
+      const foreignKeys: ForeignKeyInfo[] = [];
+      const pkColumns = new Set<string>();
+      const uniqueColumns = new Set<string>();
+
+      const lines = body.split('\n');
 
     for (let line of lines) {
       line = line.trim();
@@ -190,12 +233,13 @@ export function parseSqlSchema(sqlContent: string, options: ParserOptions = {}):
       }
     });
 
-    tables.push({
-      name: rawTableName,
-      className,
-      columns,
-      foreignKeys
-    });
+      tables.push({
+        name: rawTableName,
+        className,
+        columns,
+        foreignKeys
+      });
+    }
   }
 
   // Also check for standalone ALTER TABLE ... ADD CONSTRAINT ... FOREIGN KEY
@@ -224,8 +268,10 @@ export function parseSqlSchema(sqlContent: string, options: ParserOptions = {}):
       if (col) {
         col.isFk = true;
       }
-      // If the FK column in this child table is marked UNIQUE or is the PRIMARY KEY, it's a 1:1 relation
-      const isOneToOne = col ? Boolean(col.isPk || col.isUnique) : false;
+      // If the FK column in this child table is marked UNIQUE or is a single-column PRIMARY KEY, it's a 1:1 relation
+      const pkCount = table.columns.filter((c) => c.isPk).length;
+      const isSingleColPk = pkCount === 1 && Boolean(col?.isPk);
+      const isOneToOne = col ? Boolean(isSingleColPk || col.isUnique) : false;
       fk.cardinality = isOneToOne ? '1:1' : '1:*';
     }
   }
