@@ -366,7 +366,7 @@ function ConverterContent() {
                 onChange={(e) => handleOptionChange({ includeMethods: e.target.checked })}
                 className="w-3.5 h-3.5 rounded bg-slate-950 border-slate-700 text-indigo-600 focus:ring-0"
               />
-              <span>Incluir Métodos CRUD (+registrar, +actualizar)</span>
+              <span>Métodos de Clase Inteligentes (+lógica de dominio)</span>
             </label>
 
             <label className="flex items-center gap-2 cursor-pointer select-none">

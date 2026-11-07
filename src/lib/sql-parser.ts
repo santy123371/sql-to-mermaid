@@ -60,6 +60,234 @@ function mapSqlType(sqlType: string): string {
   return 'string';
 }
 
+/**
+ * Infers contextual, domain-specific UML methods based on the table's archetype,
+ * column names, constraints, and relationships instead of static CRUD for every class.
+ */
+export function generateSmartMethods(table: TableInfo): string[] {
+  const raw = table.name.toLowerCase().replace(/^(tbl_|cs_|cat_|t_)/, '');
+  const cols = table.columns.map((c) => c.name.toLowerCase());
+
+  const hasCol = (...names: string[]) => cols.some((c) => names.some((n) => c.includes(n)));
+
+  // 1. Logs, History, and Audit (Append-only / Immutable tracking)
+  if (
+    raw.includes('audit') ||
+    raw.includes('log') ||
+    raw.includes('historial') ||
+    raw.includes('history') ||
+    raw.includes('evento') ||
+    raw.includes('track')
+  ) {
+    return [
+      '+registrarEvento()',
+      '+consultarLogs()',
+      '+filtrarPorFecha()',
+      '+exportar()'
+    ];
+  }
+
+  // 2. Pivot / Junction Tables (Roles-Permisos, Usuario-Rol, etc.)
+  const pkCount = table.columns.filter((c) => c.isPk).length;
+  const isJunctionTable =
+    pkCount > 1 ||
+    (table.foreignKeys.length >= 2 && table.columns.length <= 5) ||
+    raw.includes('_has_') ||
+    (raw.includes('_') && table.foreignKeys.length >= 2);
+
+  if (isJunctionTable) {
+    return [
+      '+asignar()',
+      '+revocar()',
+      '+verificarAcceso()',
+      '+listar()'
+    ];
+  }
+
+  // 3. User, Auth, Accounts, Profiles, Persons, Clients, Employees
+  if (
+    raw.includes('usu') ||
+    raw.includes('user') ||
+    raw.includes('cliente') ||
+    raw.includes('empleado') ||
+    raw.includes('account') ||
+    raw.includes('perfil') ||
+    raw.includes('profile') ||
+    raw.includes('persona') ||
+    raw.includes('staff') ||
+    raw.includes('member')
+  ) {
+    const hasPassword = hasCol('pass', 'con_usu', 'pwd', 'password', 'clave', 'hash');
+    const methods = ['+autenticar()', '+actualizarPerfil()'];
+    if (hasPassword) {
+      methods.push('+cambiarClave()');
+    }
+    methods.push('+deshabilitar()');
+    return methods;
+  }
+
+  // 4. Invoicing, Payments, Orders, Sales, Checkout, Bookings, Appointments
+  if (
+    raw.includes('fac') ||
+    raw.includes('invoice') ||
+    raw.includes('pago') ||
+    raw.includes('payment') ||
+    raw.includes('orden') ||
+    raw.includes('order') ||
+    raw.includes('venta') ||
+    raw.includes('sale') ||
+    raw.includes('transac') ||
+    raw.includes('cobro') ||
+    raw.includes('reserva') ||
+    raw.includes('booking') ||
+    raw.includes('cita')
+  ) {
+    if (raw.includes('cita') || raw.includes('reserva') || raw.includes('booking')) {
+      return ['+agendar()', '+confirmar()', '+reprogramar()', '+cancelar()'];
+    }
+    const isParkingFactura = hasCol('hor_ent', 'hor_sal', 'veh', 'entrada', 'salida');
+    if (isParkingFactura) {
+      return [
+        '+registrarEntrada()',
+        '+registrarSalida()',
+        '+calcularTotal()',
+        '+emitirComprobante()'
+      ];
+    }
+    return [
+      '+generarFactura()',
+      '+calcularTotal()',
+      '+procesarPago()',
+      '+anular()'
+    ];
+  }
+
+  // 5. Products, Items, Articles, Services, Inventory, Menu
+  if (
+    raw.includes('prod') ||
+    raw.includes('articulo') ||
+    raw.includes('item') ||
+    raw.includes('servicio') ||
+    raw.includes('service') ||
+    raw.includes('inventario') ||
+    raw.includes('stock') ||
+    raw.includes('menu')
+  ) {
+    const hasStock = hasCol('stock', 'cant', 'quantity', 'existencia');
+    const hasPrice = hasCol('precio', 'price', 'costo', 'valor');
+    const methods = ['+crear()'];
+    if (hasStock) methods.push('+actualizarStock()');
+    if (hasPrice) methods.push('+ajustarPrecio()');
+    methods.push('+consultar()');
+    methods.push('+deshabilitar()');
+    return methods;
+  }
+
+  // 6. Physical spaces, parking bays, rooms, slots, assets
+  if (
+    raw.includes('espacio') ||
+    raw.includes('bahia') ||
+    raw.includes('slot') ||
+    raw.includes('room') ||
+    raw.includes('habitacion') ||
+    raw.includes('cancha') ||
+    raw.includes('mesa') ||
+    raw.includes('zona') ||
+    raw.includes('sede')
+  ) {
+    return [
+      '+ocupar()',
+      '+liberar()',
+      '+verificarDisponibilidad()',
+      '+cambiarEstado()'
+    ];
+  }
+
+  // 7. Vehicles, Transport
+  if (
+    raw.includes('veh') ||
+    raw.includes('car') ||
+    raw.includes('auto') ||
+    raw.includes('moto') ||
+    raw.includes('camion')
+  ) {
+    if (raw.includes('tipo')) {
+      return ['+listarTipos()', '+obtenerTarifa()', '+actualizar()'];
+    }
+    return [
+      '+registrarVehiculo()',
+      '+validarPlaca()',
+      '+consultarPropietario()',
+      '+obtenerHistorial()'
+    ];
+  }
+
+  // 8. Rates, Tariffs, Pricing, Plans, Subscriptions
+  if (
+    raw.includes('tar') ||
+    raw.includes('precio') ||
+    raw.includes('price') ||
+    raw.includes('plan') ||
+    raw.includes('suscrip')
+  ) {
+    return [
+      '+calcularValor()',
+      '+ajustarTarifa()',
+      '+consultarVigente()'
+    ];
+  }
+
+  // 9. Expenses, Costs, Finance, Budgets
+  if (
+    raw.includes('gas') ||
+    raw.includes('expense') ||
+    raw.includes('costo') ||
+    raw.includes('presupuesto') ||
+    raw.includes('finanz')
+  ) {
+    return [
+      '+registrarGasto()',
+      '+calcularTotal()',
+      '+filtrarPorFecha()',
+      '+exportarReporte()'
+    ];
+  }
+
+  // 10. Permissions, Roles, Catalogs, Taxonomies, Categories, Departments
+  if (
+    raw.includes('perm') ||
+    raw.includes('rol') ||
+    raw.includes('cat') ||
+    raw.includes('tipo') ||
+    raw.includes('estado') ||
+    raw.includes('depto') ||
+    raw.includes('area')
+  ) {
+    if (raw.includes('perm')) {
+      return ['+listarPermisos()', '+verificarAcceso()', '+cambiarEstado()'];
+    }
+    if (raw.includes('rol')) {
+      return ['+crearRol()', '+asignarPermisos()', '+consultarUsuarios()'];
+    }
+    return ['+listar()', '+agregar()', '+actualizar()', '+desactivar()'];
+  }
+
+  // 11. General entity fallback with intelligent hints from columns
+  const methods = ['+registrar()', '+actualizar()', '+consultar()'];
+
+  if (hasCol('precio', 'total', 'monto', 'val_', 'subtotal', 'saldo')) {
+    methods.push('+calcularTotal()');
+  } else if (hasCol('estado', 'status', 'est_')) {
+    methods.push('+cambiarEstado()');
+  } else if (hasCol('activo', 'act_', 'is_active', 'enabled', 'visible')) {
+    methods.push('+deshabilitar()');
+  } else {
+    methods.push('+eliminar()');
+  }
+
+  return methods;
+}
+
 export function parseSqlSchema(sqlContent: string, options: ParserOptions = {}): {
   tables: TableInfo[];
   mermaidCode: string;
@@ -294,14 +522,9 @@ export function parseSqlSchema(sqlContent: string, options: ParserOptions = {}):
         mermaidCode += `        +${col.type} ${col.name}${pkPrefix}\n`;
       }
       if (includeMethods) {
-        mermaidCode += `        +registrar()\n`;
-        mermaidCode += `        +actualizar()\n`;
-        mermaidCode += `        +consultar()\n`;
-        const hasActive = table.columns.some((c) => c.name.startsWith('act_') || c.name.includes('activo'));
-        if (hasActive || table.name.includes('usu') || table.name.includes('org')) {
-          mermaidCode += `        +deshabilitar()\n`;
-        } else {
-          mermaidCode += `        +eliminar()\n`;
+        const smartMethods = generateSmartMethods(table);
+        for (const m of smartMethods) {
+          mermaidCode += `        ${m}\n`;
         }
       }
       mermaidCode += `    }\n\n`;
