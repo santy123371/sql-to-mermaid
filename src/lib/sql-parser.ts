@@ -63,6 +63,14 @@ function mapSqlType(sqlType: string): string {
 /**
  * Infers contextual, domain-specific UML methods based on the table's archetype,
  * column names, constraints, and relationships instead of static CRUD for every class.
+ *
+ * It dynamically analyzes:
+ * 1. The structural & semantic archetype of the table (Junction, Line Item, Aggregate Root,
+ *    Append-Only Ledger/Log, Security Token, Master Catalog, Living Entity, etc.)
+ * 2. Which lifecycle methods MUST be included (e.g. specialized domain verbs)
+ * 3. Which methods MUST BE EXCLUDED (e.g. NEVER put `eliminar()` when soft-delete or state
+ *    machine is present; NEVER put `actualizar()` on immutable logs; NO generic CRUD on junction tables)
+ * 4. Deep column-level capability synthesis (pricing, stock, credentials, temporal validation, files)
  */
 export function generateSmartMethods(table: TableInfo): string[] {
   const raw = table.name.toLowerCase().replace(/^(tbl_|cs_|cat_|t_)/, '');
@@ -70,32 +78,91 @@ export function generateSmartMethods(table: TableInfo): string[] {
 
   const hasCol = (...names: string[]) => cols.some((c) => names.some((n) => c.includes(n)));
 
+  // Structural indicators
+  const pkCols = table.columns.filter((c) => c.isPk);
+  const isCompositePk = pkCols.length > 1;
+  const fkCount = table.foreignKeys.length;
+
+  // Deletion & lifecycle characteristics
+  const hasSoftDelete = hasCol('deleted_at', 'is_deleted', 'eliminado', 'fec_eli', 'borrado');
+  const hasActiveFlag = hasCol('activo', 'is_active', 'enabled', 'habilitado', 'act_', 'status_act');
+  const hasState = hasCol('estado', 'status', 'est_', 'state', 'situacion', 'condicion');
+
+  // Column domain capabilities
+  const hasMoneyOrTotal = hasCol('precio', 'total', 'monto', 'val_', 'subtotal', 'saldo', 'costo', 'tarifa', 'deuda', 'abono');
+  const hasStockOrQty = hasCol('stock', 'existencia', 'cant', 'quantity', 'inventario');
+  const hasCredentials = hasCol('pass', 'con_usu', 'pwd', 'password', 'clave', 'hash');
+  const hasTimeRange = (hasCol('hora_ini', 'hora_inicio', 'start_time') && hasCol('hora_fin', 'end_time')) ||
+                       (hasCol('fec_ini', 'fecha_inicio', 'start_date') && hasCol('fec_fin', 'fecha_fin', 'end_date'));
+  const hasMediaFiles = hasCol('imagen', 'foto', 'archivo', 'url', 'avatar', 'adjunto', 'comprobante_img', 'pdf');
+  const hasBarcodeOrSku = hasCol('barcode', 'sku', 'codigo_barra', 'qr');
+
   // 1. Logs, History, and Audit (Append-only / Immutable tracking)
-  if (
+  const isAuditOrLog =
     raw.includes('audit') ||
     raw.includes('log') ||
     raw.includes('historial') ||
     raw.includes('history') ||
     raw.includes('evento') ||
-    raw.includes('track')
-  ) {
+    raw.includes('track') ||
+    raw.includes('bitacora') ||
+    raw.includes('trazab');
+
+  if (isAuditOrLog) {
+    // Clinical history is a specialized veterinary medical document
+    if (raw.includes('historial') && (raw.includes('clin') || hasCol('diag', 'tra_', 'pes_', 'tem_'))) {
+      return [
+        '+registrar()',
+        '+actualizar()',
+        '+consultar()',
+        '+visualizar()',
+        '+abrirEntrada()',
+        '+prescribirTratamiento()',
+        '+exportarResumenPDF()'
+      ];
+    }
+    // Standard system/audit logs are strictly APPEND-ONLY: NO actualizar(), NO eliminar()
     return [
-      '+registrarEvento()',
-      '+consultarLogs()',
-      '+filtrarPorFecha()',
-      '+exportar()'
+      '+registrar()',
+      '+consultar()',
+      '+filtrarPorUsuario()',
+      '+filtrarPorRecurso()',
+      '+exportarCSV()'
     ];
   }
 
-  // 2. Pivot / Junction Tables (Roles-Permisos, Usuario-Rol, etc.)
-  const pkCount = table.columns.filter((c) => c.isPk).length;
+  // 2. Order Details, Sale Lines, Appointment Details, Line Items
+  const isLineItemDetail =
+    raw.includes('detalle') ||
+    raw.includes('detail') ||
+    raw.includes('line') ||
+    raw.includes('renglon') ||
+    (raw.includes('item') && !raw.includes('invent') && !raw.includes('catalog')) ||
+    (fkCount >= 2 && hasCol('cant', 'quantity', 'subtotal', 'pre_uni', 'precio_uni', 'sub_'));
+
+  if (isLineItemDetail) {
+    const methods = [
+      '+registrar()',
+      '+actualizar()',
+      '+consultar()',
+      '+agregar()',
+      '+eliminar()',
+      '+calcularSubtotal()'
+    ];
+    if (hasStockOrQty) {
+      methods.push('+validarDisponibilidad()');
+    }
+    return methods;
+  }
+
+  // 3. Pivot / Pure Junction / Access-Mapping Tables
   const isJunctionTable =
-    pkCount > 1 ||
-    (table.foreignKeys.length >= 2 && table.columns.length <= 5) ||
-    raw.includes('_has_') ||
-    (raw.includes('_') && table.foreignKeys.length >= 2);
+    !isLineItemDetail &&
+    (isCompositePk || (fkCount >= 2 && table.columns.length <= 5) || raw.includes('_has_') || (raw.includes('_') && fkCount >= 2)) &&
+    !hasCol('cant', 'subtotal', 'precio', 'total', 'observacion', 'diagnostico');
 
   if (isJunctionTable) {
+    // Pure junction tables link entities: they don't have autonomous CRUD
     return [
       '+asignar()',
       '+revocar()',
@@ -104,7 +171,63 @@ export function generateSmartMethods(table: TableInfo): string[] {
     ];
   }
 
-  // 3. User, Auth, Accounts, Profiles, Persons, Clients, Employees
+  // 4. Pets, Animals, Veterinary Patients
+  if (
+    raw.includes('mascota') ||
+    raw.includes('pet') ||
+    raw.includes('animal') ||
+    raw.includes('paciente')
+  ) {
+    return [
+      '+registrar()',
+      '+actualizar()',
+      '+consultar()',
+      '+deshabilitar()',
+      '+actualizarPeso()',
+      '+listarPorPropietario()',
+      '+obtenerCarnetCompleto()'
+    ];
+  }
+
+  // 5. Vaccines, Immunizations, Medical Doses
+  if (
+    raw.includes('vacuna') ||
+    raw.includes('vaccin') ||
+    raw.includes('dosis') ||
+    raw.includes('inmuniz')
+  ) {
+    return [
+      '+registrar()',
+      '+actualizar()',
+      '+consultar()',
+      '+aplicarDosis()',
+      '+programarRefuerzo()',
+      '+obtenerCarnetVacunacion()'
+    ];
+  }
+
+  // 6. Appointments, Bookings, Scheduling (Workflow Aggregate)
+  if (
+    raw.includes('cita') ||
+    raw.includes('reserva') ||
+    raw.includes('booking') ||
+    raw.includes('appointment')
+  ) {
+    // Appointments follow a state lifecycle: they are canceled or rescheduled, never hard deleted
+    return [
+      '+registrar()',
+      '+actualizar()',
+      '+consultar()',
+      '+visualizar()',
+      '+agendarCita()',
+      '+reprogramar()',
+      '+iniciarAtencion()',
+      '+cancelarCita()',
+      '+verificarDisponibilidad()'
+    ];
+  }
+
+  // 7. User, Auth, Accounts, Profiles, Persons, Clients, Employees
   if (
     raw.includes('usu') ||
     raw.includes('user') ||
@@ -117,16 +240,88 @@ export function generateSmartMethods(table: TableInfo): string[] {
     raw.includes('staff') ||
     raw.includes('member')
   ) {
-    const hasPassword = hasCol('pass', 'con_usu', 'pwd', 'password', 'clave', 'hash');
-    const methods = ['+autenticar()', '+actualizarPerfil()'];
-    if (hasPassword) {
-      methods.push('+cambiarClave()');
+    const methods = ['+registrar()', '+actualizar()', '+consultar()'];
+    if (hasCredentials) {
+      methods.push('+autenticar()');
+      methods.push('+cambiarPassword()');
+      if (hasCol('totp', '2fa', 'mfa')) {
+        methods.push('+verificarTOTP()');
+      }
     }
+    // Users are deactivated to preserve foreign key referential integrity
     methods.push('+deshabilitar()');
     return methods;
   }
 
-  // 4. Invoicing, Payments, Orders, Sales, Checkout, Bookings, Appointments
+  // 8. Roles & Permissions
+  if (raw.includes('rol') || raw.includes('role')) {
+    return [
+      '+registrar()',
+      '+actualizar()',
+      '+consultar()',
+      '+obtenerPermisosRol()',
+      '+sincronizarPermisosDefault()'
+    ];
+  }
+
+  if (raw.includes('perm') || raw.includes('permission')) {
+    return [
+      '+registrar()',
+      '+actualizar()',
+      '+consultar()',
+      '+eliminar()',
+      '+asignarPermiso()',
+      '+verificarPermiso()'
+    ];
+  }
+
+  // 9. Services
+  if (raw.includes('servicio') || raw.includes('service')) {
+    return [
+      '+registrar()',
+      '+actualizar()',
+      '+consultar()',
+      '+agregar()',
+      '+deshabilitar()',
+      '+actualizarTarifa()',
+      '+listarActivos()'
+    ];
+  }
+
+  // 10. Products, Articles, Catalog, Physical Inventory
+  if (
+    raw.includes('prod') ||
+    raw.includes('articulo') ||
+    raw.includes('inventario') ||
+    raw.includes('stock') ||
+    raw.includes('menu') ||
+    raw.includes('catalogo')
+  ) {
+    const methods = ['+registrar()', '+actualizar()', '+consultar()'];
+    if (hasStockOrQty) {
+      methods.push('+descontarStock()');
+      methods.push('+reponerStock()');
+      methods.push('+verificarStockBajo()');
+    }
+    if (hasMoneyOrTotal) methods.push('+actualizarPrecios()');
+    if (hasBarcodeOrSku) methods.push('+buscarPorCodigo()');
+    methods.push('+deshabilitar()');
+    return methods;
+  }
+
+  // 11. Stock Movements & Kardex (Append-only: NO actualizar, NO eliminar)
+  if (raw.includes('stock_mov') || raw.includes('mov_stm') || raw.includes('kardex')) {
+    return [
+      '+registrar()',
+      '+consultar()',
+      '+registrarEntrada()',
+      '+registrarSalidaVenta()',
+      '+registrarSalidaCita()',
+      '+obtenerKardex()'
+    ];
+  }
+
+  // 12. Invoicing, Payments, Orders, Sales, Checkout (Fiscal / Transactional Aggregate)
   if (
     raw.includes('fac') ||
     raw.includes('invoice') ||
@@ -137,14 +332,8 @@ export function generateSmartMethods(table: TableInfo): string[] {
     raw.includes('venta') ||
     raw.includes('sale') ||
     raw.includes('transac') ||
-    raw.includes('cobro') ||
-    raw.includes('reserva') ||
-    raw.includes('booking') ||
-    raw.includes('cita')
+    raw.includes('cobro')
   ) {
-    if (raw.includes('cita') || raw.includes('reserva') || raw.includes('booking')) {
-      return ['+agendar()', '+confirmar()', '+reprogramar()', '+cancelar()'];
-    }
     const isParkingFactura = hasCol('hor_ent', 'hor_sal', 'veh', 'entrada', 'salida');
     if (isParkingFactura) {
       return [
@@ -154,36 +343,195 @@ export function generateSmartMethods(table: TableInfo): string[] {
         '+emitirComprobante()'
       ];
     }
+    // Financial records are never deleted; they are annulled or credited
     return [
-      '+generarFactura()',
+      '+registrar()',
+      '+actualizar()',
+      '+consultar()',
+      '+visualizar()',
       '+calcularTotal()',
-      '+procesarPago()',
+      '+finalizarVenta()',
+      '+generarFacturaPDF()',
       '+anular()'
     ];
   }
 
-  // 5. Products, Items, Articles, Services, Inventory, Menu
+  // 13. Attendance, Time Tracking, Shifts, Schedules
   if (
-    raw.includes('prod') ||
-    raw.includes('articulo') ||
-    raw.includes('item') ||
-    raw.includes('servicio') ||
-    raw.includes('service') ||
-    raw.includes('inventario') ||
-    raw.includes('stock') ||
-    raw.includes('menu')
+    raw.includes('asist') ||
+    raw.includes('attendance') ||
+    raw.includes('horario') ||
+    raw.includes('schedule') ||
+    raw.includes('turno') ||
+    raw.includes('shift')
   ) {
-    const hasStock = hasCol('stock', 'cant', 'quantity', 'existencia');
-    const hasPrice = hasCol('precio', 'price', 'costo', 'valor');
-    const methods = ['+crear()'];
-    if (hasStock) methods.push('+actualizarStock()');
-    if (hasPrice) methods.push('+ajustarPrecio()');
-    methods.push('+consultar()');
-    methods.push('+deshabilitar()');
-    return methods;
+    if (raw.includes('asist') || raw.includes('attendance')) {
+      return [
+        '+registrar()',
+        '+actualizar()',
+        '+consultar()',
+        '+marcarEntradaQR()',
+        '+marcarSalidaQR()',
+        '+calcularHorasLaboradas()',
+        '+justificarFalta()'
+      ];
+    }
+    return [
+      '+registrar()',
+      '+actualizar()',
+      '+consultar()',
+      '+eliminar()',
+      '+validarSinSolape()',
+      '+excluirAlmuerzo()',
+      '+obtenerHorasDisponibles()'
+    ];
   }
 
-  // 6. Physical spaces, parking bays, rooms, slots, assets
+  // 14. Payroll, Salaries, Labor Rates
+  if (
+    raw.includes('nomina') ||
+    raw.includes('payroll') ||
+    raw.includes('salario') ||
+    raw.includes('sueldo') ||
+    raw.includes('tarifa')
+  ) {
+    if (raw.includes('tarifa') || raw.includes('rate')) {
+      return [
+        '+registrar()',
+        '+actualizar()',
+        '+consultar()',
+        '+definirTarifa()',
+        '+obtenerTarifaVigente()'
+      ];
+    }
+    return [
+      '+registrar()',
+      '+consultar()',
+      '+visualizar()',
+      '+liquidarPeriodo()',
+      '+marcarComoPagado()',
+      '+generarColillaPDF()'
+    ];
+  }
+
+  // 15. Password Resets, Sessions, Tokens, API Keys, OAuth, Nonces, Rate Limits (Temporary Security)
+  if (
+    raw.includes('reset') ||
+    raw.includes('token') ||
+    raw.includes('session') ||
+    raw.includes('api_key') ||
+    raw.includes('oauth') ||
+    raw.includes('nonce') ||
+    raw.includes('rate_limit') ||
+    raw.includes('qr_scan') ||
+    raw.includes('idempot')
+  ) {
+    if (raw.includes('reset')) {
+      return [
+        '+registrar()',
+        '+consultar()',
+        '+solicitarReset()',
+        '+validarToken()',
+        '+consumirToken()',
+        '+purgarExpirados()'
+      ];
+    }
+    if (raw.includes('idempot')) {
+      return [
+        '+registrar()',
+        '+consultar()',
+        '+guardarRespuesta()',
+        '+obtenerRespuesta()',
+        '+purgarExpiradas()'
+      ];
+    }
+    if (raw.includes('rate_limit')) {
+      return [
+        '+registrar()',
+        '+consultar()',
+        '+verificarBloqueo()',
+        '+limpiarHistorial()'
+      ];
+    }
+    if (raw.includes('nonce')) {
+      return [
+        '+registrar()',
+        '+consultar()',
+        '+validarYConsumirNonce()',
+        '+purgarExpirados()'
+      ];
+    }
+    if (raw.includes('qr')) {
+      return [
+        '+registrar()',
+        '+consultar()',
+        '+validarEscaneo()',
+        '+detectarAnomalias()'
+      ];
+    }
+    if (raw.includes('oauth')) {
+      if (raw.includes('client')) {
+        return [
+          '+registrar()',
+          '+actualizar()',
+          '+consultar()',
+          '+validarCredenciales()',
+          '+validarRedirectUri()'
+        ];
+      }
+      return [
+        '+registrar()',
+        '+consultar()',
+        '+emitirCodigo()',
+        '+canjearCodigo()',
+        '+purgarCodigosExpirados()'
+      ];
+    }
+    return [
+      '+registrar()',
+      '+consultar()',
+      '+generarToken()',
+      '+validarTokenHash()',
+      '+revocarToken()',
+      '+purgarExpirados()'
+    ];
+  }
+
+  // 16. Translations / i18n
+  if (
+    raw.includes('traducc') ||
+    raw.includes('translation') ||
+    raw.includes('i18n')
+  ) {
+    return [
+      '+registrar()',
+      '+actualizar()',
+      '+consultar()',
+      '+eliminar()',
+      '+guardarTraduccion()',
+      '+obtenerTraduccion()'
+    ];
+  }
+
+  // 17. Announcements, Ads, Banners, Posts
+  if (
+    raw.includes('anuncio') ||
+    raw.includes('ad') ||
+    raw.includes('banner') ||
+    raw.includes('post') ||
+    raw.includes('noticia')
+  ) {
+    return [
+      '+registrar()',
+      '+actualizar()',
+      '+consultar()',
+      '+deshabilitar()',
+      '+publicarAnuncio()',
+      '+cambiarVisibilidad()'
+    ];
+  }
+
+  // 18. Physical spaces, parking bays, rooms, slots, assets
   if (
     raw.includes('espacio') ||
     raw.includes('bahia') ||
@@ -203,7 +551,7 @@ export function generateSmartMethods(table: TableInfo): string[] {
     ];
   }
 
-  // 7. Vehicles, Transport
+  // 19. Vehicles, Transport
   if (
     raw.includes('veh') ||
     raw.includes('car') ||
@@ -222,7 +570,7 @@ export function generateSmartMethods(table: TableInfo): string[] {
     ];
   }
 
-  // 8. Rates, Tariffs, Pricing, Plans, Subscriptions
+  // 20. Rates, Tariffs, Pricing, Plans, Subscriptions
   if (
     raw.includes('tar') ||
     raw.includes('precio') ||
@@ -231,13 +579,15 @@ export function generateSmartMethods(table: TableInfo): string[] {
     raw.includes('suscrip')
   ) {
     return [
-      '+calcularValor()',
-      '+ajustarTarifa()',
-      '+consultarVigente()'
+      '+registrar()',
+      '+actualizar()',
+      '+consultar()',
+      '+deshabilitar()',
+      '+destacarPlan()'
     ];
   }
 
-  // 9. Expenses, Costs, Finance, Budgets
+  // 21. Expenses, Costs, Finance, Budgets
   if (
     raw.includes('gas') ||
     raw.includes('expense') ||
@@ -253,35 +603,74 @@ export function generateSmartMethods(table: TableInfo): string[] {
     ];
   }
 
-  // 10. Permissions, Roles, Catalogs, Taxonomies, Categories, Departments
-  if (
-    raw.includes('perm') ||
-    raw.includes('rol') ||
-    raw.includes('cat') ||
-    raw.includes('tipo') ||
-    raw.includes('estado') ||
-    raw.includes('depto') ||
-    raw.includes('area')
-  ) {
-    if (raw.includes('perm')) {
-      return ['+listarPermisos()', '+verificarAcceso()', '+cambiarEstado()'];
-    }
-    if (raw.includes('rol')) {
-      return ['+crearRol()', '+asignarPermisos()', '+consultarUsuarios()'];
-    }
-    return ['+listar()', '+agregar()', '+actualizar()', '+desactivar()'];
+  // 22. Parametric Lookup / Master Catalogs (razas, especies, departamentos, etc.)
+  const isLookupCatalog =
+    raw.startsWith('cat_') ||
+    raw.startsWith('tipo_') ||
+    raw.startsWith('tipos_') ||
+    raw.includes('categoria') ||
+    raw.includes('especie') ||
+    raw.includes('raza') ||
+    raw.includes('genero') ||
+    raw.includes('pais') ||
+    raw.includes('departamento') ||
+    raw.includes('municipio') ||
+    raw.includes('ciudad') ||
+    raw.includes('moneda');
+
+  if (isLookupCatalog) {
+    const catalogMethods = ['+registrar()', '+actualizar()', '+consultar()', '+listarActivos()', '+buscarPorNombre()'];
+    if (hasActiveFlag) catalogMethods.push('+deshabilitar()');
+    return catalogMethods;
   }
 
-  // 11. General entity fallback with intelligent hints from columns
-  const methods = ['+registrar()', '+actualizar()', '+consultar()'];
+  // 23. Intelligent Dynamic Behavioral Synthesis for ANY Unmatched / Custom Table
+  // Rather than default static CRUD, it constructs methods based on actual table semantics & column usage:
+  const methods: string[] = ['+registrar()', '+actualizar()', '+consultar()'];
 
-  if (hasCol('precio', 'total', 'monto', 'val_', 'subtotal', 'saldo')) {
+  // Detail / Long-text inspection
+  if (hasCol('desc', 'nota', 'obs', 'detalle', 'body', 'content', 'comentario', 'json')) {
+    methods.push('+visualizar()');
+  }
+
+  // Financial / Subtotal calculations
+  if (hasMoneyOrTotal) {
     methods.push('+calcularTotal()');
-  } else if (hasCol('estado', 'status', 'est_')) {
-    methods.push('+cambiarEstado()');
-  } else if (hasCol('activo', 'act_', 'is_active', 'enabled', 'visible')) {
+  }
+
+  // Stock / Availability checks
+  if (hasStockOrQty) {
+    methods.push('+verificarDisponibilidad()');
+  }
+
+  // Temporal slot & scheduling validation
+  if (hasTimeRange) {
+    methods.push('+validarSinSolape()');
+  }
+
+  // Media / File attachment handling
+  if (hasMediaFiles) {
+    methods.push('+subirArchivo()');
+  }
+
+  // Search by code / barcode
+  if (hasBarcodeOrSku) {
+    methods.push('+buscarPorCodigo()');
+  }
+
+  // Deletion vs Inactivation vs State Machine (Deciding WHICH TO PUT OR NOT TO PUT):
+  if (hasSoftDelete) {
+    // Soft deletion pattern: never physically delete
+    methods.push('+softDelete()');
+    methods.push('+restaurar()');
+  } else if (hasActiveFlag) {
+    // Inactivation pattern: soft disable to protect referential integrity
     methods.push('+deshabilitar()');
+  } else if (hasState) {
+    // State machine pattern
+    methods.push('+cambiarEstado()');
   } else {
+    // Physical delete ONLY when no status or soft-delete safety exists
     methods.push('+eliminar()');
   }
 
