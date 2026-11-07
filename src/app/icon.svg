@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" fill="none">
+  <defs>
+    <linearGradient id="bgGlow" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#4f46e5" stop-opacity="0.6"/>
+      <stop offset="100%" stop-color="#06b6d4" stop-opacity="0.3"/>
+    </linearGradient>
+    <linearGradient id="dbGrad" x1="16" y1="16" x2="48" y2="48" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#a5b4fc"/>
+      <stop offset="100%" stop-color="#818cf8"/>
+    </linearGradient>
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="2" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+  </defs>
+
+  <!-- Background Squircle -->
+  <rect x="2" y="2" width="60" height="60" rx="16" fill="#090d16" stroke="url(#bgGlow)" stroke-width="2"/>
+
+  <!-- Database Icon Centered with Glow -->
+  <g filter="url(#glow)">
+    <!-- Top Ellipse -->
+    <ellipse cx="32" cy="24" rx="13" ry="5.5" stroke="url(#dbGrad)" stroke-width="3" stroke-linecap="round" fill="#0f172a"/>
+
+    <!-- Middle Cylinder Section -->
+    <path d="M19 24v8c0 3.038 5.82 5.5 13 5.5s13-2.462 13-5.5v-8" stroke="url(#dbGrad)" stroke-width="3" stroke-linecap="round" fill="none"/>
+
+    <!-- Bottom Cylinder Section -->
+    <path d="M19 32v8c0 3.038 5.82 5.5 13 5.5s13-2.462 13-5.5v-8" stroke="url(#dbGrad)" stroke-width="3" stroke-linecap="round" fill="none"/>
+  </g>
+</svg>
