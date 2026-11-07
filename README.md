@@ -2,6 +2,7 @@
 
 > Transforma esquemas SQL (`init.sql`, DDL) en diagramas de clases UML limpios y compatibles con **Mermaid.js** (`.mmd`) al instante. 100% gratuito y de código abierto.
 
+[![Website](https://img.shields.io/badge/Demo_en_Vivo-sqlschemer.vercel.app-6366f1?style=for-the-badge&logo=vercel)](https://sqlschemer.vercel.app/)
 [![GitHub stars](https://img.shields.io/github/stars/santy123371/sql-to-mermaid?style=for-the-badge&logo=github&color=gold)](https://github.com/santy123371/sql-to-mermaid/stargazers)
 [![GitHub forks](https://img.shields.io/github/forks/santy123371/sql-to-mermaid?style=for-the-badge&logo=github&color=blue)](https://github.com/santy123371/sql-to-mermaid/network/members)
 [![Next.js](https://img.shields.io/badge/Next.js-16-black?style=for-the-badge&logo=next.js)](https://nextjs.org/)
@@ -9,6 +10,8 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-5-blue?style=for-the-badge&logo=typescript)](https://www.typescriptlang.org/)
 [![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-v4-38B2AC?style=for-the-badge&logo=tailwind-css)](https://tailwindcss.com/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg?style=for-the-badge)](./LICENSE)
+
+🌐 **Sitio Web Oficial / Demo en Vivo**: [https://sqlschemer.vercel.app](https://sqlschemer.vercel.app)
 
 ---
 
@@ -62,6 +65,8 @@ Al desarrollar aplicaciones y diseñar bases de datos, documentar las clases y s
 ---
 
 ## 📦 Instalación y Ejecución Local
+
+> 🌐 **¿Prefieres no instalar nada?** Puedes acceder directamente a la versión en producción en [https://sqlschemer.vercel.app](https://sqlschemer.vercel.app).
 
 1. **Clona este repositorio**:
    ```bash

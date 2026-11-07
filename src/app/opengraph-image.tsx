@@ -194,6 +194,36 @@ export default async function Image() {
             📥 Exporta .mmd & SVG
           </div>
         </div>
+
+        {/* Domain Footer Pill */}
+        <div
+          style={{
+            position: 'absolute',
+            bottom: '26px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            padding: '6px 16px',
+            borderRadius: '9999px',
+            background: 'rgba(15, 23, 42, 0.85)',
+            border: '1px solid rgba(99, 102, 241, 0.35)',
+            color: '#cbd5e1',
+            fontSize: '14px',
+            fontWeight: 600,
+            letterSpacing: '0.5px',
+          }}
+        >
+          <div
+            style={{
+              width: '8px',
+              height: '8px',
+              borderRadius: '9999px',
+              background: '#10b981',
+              boxShadow: '0 0 8px #10b981',
+            }}
+          />
+          <span>sqlschemer.vercel.app</span>
+        </div>
       </div>
     ),
     {

@@ -1,7 +1,7 @@
 import { MetadataRoute } from 'next';
 
 export default function sitemap(): MetadataRoute.Sitemap {
-  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://sql-to-mermaid.vercel.app';
+  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://sqlschemer.vercel.app';
   const currentDate = new Date().toISOString();
 
   return [

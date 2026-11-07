@@ -2,7 +2,7 @@
   "name": "sql-schemer",
   "version": "0.1.0",
   "private": true,
-  "homepage": "https://github.com/santy123371/sql-to-mermaid",
+  "homepage": "https://sqlschemer.vercel.app",
   "repository": {
     "type": "git",
     "url": "https://github.com/santy123371/sql-to-mermaid.git"
