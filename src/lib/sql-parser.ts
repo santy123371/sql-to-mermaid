@@ -35,7 +35,7 @@ export interface ParserStats {
 // Security: Sanitize identifiers to prevent Mermaid injection / XSS
 function sanitizeIdentifier(str: string): string {
   return str
-    .replace(/[<>'"`;\\{}()]/g, '') // Strip potentially dangerous characters
+    .replace(/[<>'"`;\\{}()]/g, '')
     .trim();
 }
 
@@ -72,22 +72,32 @@ export function parseSqlSchema(sqlContent: string, options: ParserOptions = {}):
 
   const tables: TableInfo[] = [];
 
-  // Security Sanitization:
-  // 1. Strip null bytes
-  // 2. Remove script tags or HTML entities
-  // 3. Remove SQL comments
-  const sanitizedInput = sqlContent
+  // 1. Basic sanitization (comments, null bytes, script tags)
+  let cleaned = sqlContent
     .replace(/\0/g, '')
     .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
     .replace(/\/\*[\s\S]*?\*\//g, '')
     .replace(/--.*$/gm, '')
     .replace(/#.*$/gm, '');
 
-  // Regex to match CREATE TABLE statements safely
+  // 2. Intelligent DML Filter: Ignore data insertions, updates, drops and session variables
+  // This allows processing full database dumps (.sql) without choking on data rows
+  cleaned = cleaned
+    .replace(/INSERT\s+(?:IGNORE\s+|OR\s+IGNORE\s+)?INTO[\s\S]*?;/gi, '')
+    .replace(/REPLACE\s+INTO[\s\S]*?;/gi, '')
+    .replace(/UPDATE\s+[\s\S]*?;/gi, '')
+    .replace(/DELETE\s+FROM[\s\S]*?;/gi, '')
+    .replace(/DROP\s+TABLE[\s\S]*?;/gi, '')
+    .replace(/LOCK\s+TABLES[\s\S]*?;/gi, '')
+    .replace(/UNLOCK\s+TABLES;?/gi, '')
+    .replace(/SET\s+[^;]+;/gi, '')
+    .replace(/USE\s+[^;]+;/gi, '');
+
+  // 3. Regex to match CREATE TABLE statements
   const createTableRegex = /CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(?:[`"\[]?(\w+)[`"\]]?\.)?[`"\[]?(\w+)[`"\]]?\s*\(([\s\S]*?)\)(?:\s*ENGINE\s*=\s*\w+)?(?:\s*DEFAULT\s+CHARSET\s*=\s*\w+)?(?:\s*COLLATE\s*=\s*\w+)?\s*;/gi;
 
   let match: RegExpExecArray | null;
-  while ((match = createTableRegex.exec(sanitizedInput)) !== null) {
+  while ((match = createTableRegex.exec(cleaned)) !== null) {
     const rawTableName = sanitizeIdentifier(match[2] || match[1]);
     const body = match[3];
 
@@ -163,7 +173,7 @@ export function parseSqlSchema(sqlContent: string, options: ParserOptions = {}):
   // Also check for standalone ALTER TABLE ... ADD CONSTRAINT ... FOREIGN KEY
   const alterFkRegex = /ALTER\s+TABLE\s+(?:[`"\[]?\w+[`"\]]?\.)?[`"\[]?(\w+)[`"\]]?\s+ADD\s+(?:CONSTRAINT\s+[`"\[]?\w+[`"\]]?\s+)?FOREIGN\s+KEY\s*\([`"\[]?(\w+)[`"\]]?\)\s*REFERENCES\s*(?:[`"\[]?\w+[`"\]]?\.)?[`"\[]?(\w+)[`"\]]?\s*\([`"\[]?(\w+)[`"\]]?\)/gi;
   let alterMatch: RegExpExecArray | null;
-  while ((alterMatch = alterFkRegex.exec(sanitizedInput)) !== null) {
+  while ((alterMatch = alterFkRegex.exec(cleaned)) !== null) {
     const fromTable = sanitizeIdentifier(alterMatch[1]);
     const fromCol = sanitizeIdentifier(alterMatch[2]);
     const toTable = sanitizeIdentifier(alterMatch[3]);
