@@ -4,12 +4,14 @@ export interface ColumnInfo {
   isPk?: boolean;
   isFk?: boolean;
   isNullable?: boolean;
+  isUnique?: boolean;
 }
 
 export interface ForeignKeyInfo {
   column: string;
   referencedTable: string;
   referencedColumn: string;
+  cardinality?: '1:1' | '1:*';
 }
 
 export interface TableInfo {
@@ -107,6 +109,7 @@ export function parseSqlSchema(sqlContent: string, options: ParserOptions = {}):
     const columns: ColumnInfo[] = [];
     const foreignKeys: ForeignKeyInfo[] = [];
     const pkColumns = new Set<string>();
+    const uniqueColumns = new Set<string>();
 
     const lines = body.split('\n');
 
@@ -122,6 +125,16 @@ export function parseSqlSchema(sqlContent: string, options: ParserOptions = {}):
         continue;
       }
 
+      // Check for standalone UNIQUE constraints: UNIQUE (col), UNIQUE KEY [name] (col), CONSTRAINT [name] UNIQUE (col)
+      const uqMatch = line.match(/^(?:CONSTRAINT\s+[`"\[]?\w+[`"\]]?\s+)?UNIQUE(?:\s+(?:KEY|INDEX)(?:\s+[`"\[]?\w+[`"\]]?)?)?\s*\(([^)]+)\)/i);
+      if (uqMatch) {
+        const uqs = uqMatch[1].split(',').map((c) => sanitizeIdentifier(c.trim().replace(/[`"\[\]]/g, '')));
+        if (uqs.length === 1) {
+          uniqueColumns.add(uqs[0]);
+        }
+        continue;
+      }
+
       // Check for FOREIGN KEY constraints
       const fkMatch = line.match(/(?:CONSTRAINT\s+[`"\[]?\w+[`"\]]?\s+)?FOREIGN\s+KEY\s*\([`"\[]?(\w+)[`"\]]?\)\s*REFERENCES\s*(?:[`"\[]?\w+[`"\]]?\.)?[`"\[]?(\w+)[`"\]]?\s*\([`"\[]?(\w+)[`"\]]?\)/i);
       if (fkMatch) {
@@ -134,7 +147,7 @@ export function parseSqlSchema(sqlContent: string, options: ParserOptions = {}):
       }
 
       // Ignore generic indexes/keys
-      if (/^(?:UNIQUE\s+)?(?:KEY|INDEX)\s+/i.test(line)) {
+      if (/^(?:CONSTRAINT\s+[`"\[]?\w+[`"\]]?\s+)?(?:KEY|INDEX)\s+/i.test(line)) {
         continue;
       }
 
@@ -144,12 +157,24 @@ export function parseSqlSchema(sqlContent: string, options: ParserOptions = {}):
         const colName = sanitizeIdentifier(colMatch[1]);
         const rawType = colMatch[2];
         const isPk = /PRIMARY\s+KEY/i.test(line) || pkColumns.has(colName);
+        const isUnique = /\bUNIQUE\b/i.test(line) || uniqueColumns.has(colName);
+
+        // Check for inline REFERENCES
+        const inlineFkMatch = line.match(/REFERENCES\s*(?:[`"\[]?\w+[`"\]]?\.)?[`"\[]?(\w+)[`"\]]?\s*\([`"\[]?(\w+)[`"\]]?\)/i);
+        if (inlineFkMatch && !/FOREIGN\s+KEY/i.test(line)) {
+          foreignKeys.push({
+            column: colName,
+            referencedTable: sanitizeIdentifier(inlineFkMatch[1]),
+            referencedColumn: sanitizeIdentifier(inlineFkMatch[2]),
+          });
+        }
 
         if (colName) {
           columns.push({
             name: colName,
             type: mapSqlType(rawType),
             isPk,
+            isUnique,
             isNullable: !/NOT\s+NULL/i.test(line)
           });
         }
@@ -159,6 +184,9 @@ export function parseSqlSchema(sqlContent: string, options: ParserOptions = {}):
     columns.forEach((col) => {
       if (pkColumns.has(col.name)) {
         col.isPk = true;
+      }
+      if (uniqueColumns.has(col.name)) {
+        col.isUnique = true;
       }
     });
 
@@ -186,6 +214,19 @@ export function parseSqlSchema(sqlContent: string, options: ParserOptions = {}):
         referencedTable: toTable,
         referencedColumn: toCol
       });
+    }
+  }
+
+  // Finalize column isFk and foreign key cardinalities (1:1 vs 1:*)
+  for (const table of tables) {
+    for (const fk of table.foreignKeys) {
+      const col = table.columns.find((c) => c.name.toLowerCase() === fk.column.toLowerCase());
+      if (col) {
+        col.isFk = true;
+      }
+      // If the FK column in this child table is marked UNIQUE or is the PRIMARY KEY, it's a 1:1 relation
+      const isOneToOne = col ? Boolean(col.isPk || col.isUnique) : false;
+      fk.cardinality = isOneToOne ? '1:1' : '1:*';
     }
   }
 
@@ -230,7 +271,9 @@ export function parseSqlSchema(sqlContent: string, options: ParserOptions = {}):
         if (!seenRels.has(relKey)) {
           seenRels.add(relKey);
           totalRelations++;
-          mermaidCode += `    ${parentName} "1" --> "*" ${table.className} : tiene\n`;
+          const isOneToOne = fk.cardinality === '1:1';
+          const childCardinality = isOneToOne ? '1' : '*';
+          mermaidCode += `    ${parentName} "1" --> "${childCardinality}" ${table.className} : tiene\n`;
         }
       }
     }
@@ -241,7 +284,7 @@ export function parseSqlSchema(sqlContent: string, options: ParserOptions = {}):
       mermaidCode += `    ${table.className} {\n`;
       for (const col of table.columns) {
         totalColumns++;
-        const pkLabel = col.isPk ? 'PK' : '';
+        const pkLabel = col.isPk ? 'PK' : (col.isFk ? 'FK' : '');
         mermaidCode += `        ${col.type} ${col.name} ${pkLabel}\n`;
       }
       mermaidCode += `    }\n\n`;
@@ -257,7 +300,16 @@ export function parseSqlSchema(sqlContent: string, options: ParserOptions = {}):
         if (!seenRels.has(relKey)) {
           seenRels.add(relKey);
           totalRelations++;
-          mermaidCode += `    ${parentName} ||--o{ ${table.className} : "relaciona"\n`;
+          const colInfo = table.columns.find((c) => c.name.toLowerCase() === fk.column.toLowerCase());
+          const isOneToOne = fk.cardinality === '1:1';
+
+          if (isOneToOne) {
+            const relSymbol = colInfo?.isNullable ? '||--o|' : '||--||';
+            mermaidCode += `    ${parentName} ${relSymbol} ${table.className} : "relaciona"\n`;
+          } else {
+            const relSymbol = colInfo?.isNullable ? '||--o{' : '||--|{';
+            mermaidCode += `    ${parentName} ${relSymbol} ${table.className} : "relaciona"\n`;
+          }
         }
       }
     }
