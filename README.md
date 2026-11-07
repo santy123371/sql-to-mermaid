@@ -1,4 +1,4 @@
-# 🚀 SQL to Mermaid Studio
+# 🚀 SQL Schemer
 
 > Transforma esquemas SQL (`init.sql`, DDL) en diagramas de clases UML limpios y compatibles con **Mermaid.js** (`.mmd`) al instante. 100% gratuito y de código abierto.
 
@@ -26,7 +26,7 @@ Si esta herramienta te ayuda a ahorrar tiempo documentando tus bases de datos y 
 
 Al desarrollar aplicaciones y diseñar bases de datos, documentar las clases y sus relaciones en diagramas UML suele ser una tarea manual y tediosa.
 
-**SQL to Mermaid Studio** realiza **ingeniería inversa** automática sobre cualquier archivo SQL DDL (`CREATE TABLE`, `FOREIGN KEY`, `PRIMARY KEY`):
+**SQL Schemer** realiza **ingeniería inversa** automática sobre cualquier archivo SQL DDL (`CREATE TABLE`, `FOREIGN KEY`, `PRIMARY KEY`):
 1. **Detecta tablas y atributos**: Extrae columnas, tipos de datos SQL y los normaliza a tipos estándar UML (`int`, `string`, `decimal`, `datetime`, `bool`).
 2. **Infiere relaciones por Claves Foráneas**: Identifica restricciones `FOREIGN KEY` y genera conexiones con cardinalidades explícitas (`"1" --> "*"`).
 3. **Agrega métodos CRUD**: Inyecta métodos típicos de clase (`+registrar()`, `+actualizar()`, `+consultar()`, `+deshabilitar()`).
@@ -87,7 +87,7 @@ Al desarrollar aplicaciones y diseñar bases de datos, documentar las clases y s
 ## 📁 Estructura del Proyecto
 
 ```text
-SQL-to-mermaid/
+sql-schemer/
 ├── init.sql                     # Esquema de prueba (10 tablas normalizadas)
 ├── src/
 │   ├── app/

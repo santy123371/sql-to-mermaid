@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "SQL to Mermaid Studio — Generador de Diagramas UML",
-  description: "Convierte esquemas SQL (DDL, init.sql) en diagramas de clases UML completos y compatibles con Mermaid.js (.mmd). 100% gratis y de código abierto.",
+  title: "SQL Schemer — Generador de Diagramas UML",
+  description: "SQL Schemer convierte esquemas SQL (DDL, init.sql) en diagramas de clases UML completos y compatibles con Mermaid.js (.mmd). 100% gratis y de código abierto.",
   icons: {
     icon: [
       { url: "/icon.svg", type: "image/svg+xml" },

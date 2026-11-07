@@ -259,7 +259,7 @@ export default function Home() {
       {/* Footer */}
       <footer className="mt-auto border-t border-slate-900 py-8 bg-slate-950">
         <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-500">
-          <span>SQL to Mermaid Studio — Herramienta libre y 100% gratuita para la comunidad.</span>
+          <span>SQL Schemer — Herramienta libre y 100% gratuita para la comunidad.</span>
           <div className="flex items-center gap-4">
             <a
               href="https://github.com/santy123371/sql-to-mermaid"

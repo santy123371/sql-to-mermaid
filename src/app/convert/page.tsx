@@ -224,7 +224,7 @@ function ConverterContent() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = 'diagrama-clases.mmd';
+    link.download = 'sql-schemer-diagrama.mmd';
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -275,7 +275,7 @@ function ConverterContent() {
             <div>
               <div className="flex items-center gap-2.5">
                 <h1 className="text-base sm:text-lg font-bold text-white">
-                  SQL to Mermaid Studio
+                  SQL Schemer Studio
                 </h1>
                 {parsedResult.stats.tablesCount > 0 && (
                   <div className="flex items-center gap-1.5 font-mono text-[11px]">
@@ -538,7 +538,7 @@ function ConverterContent() {
 
 export default function ConverterPage() {
   return (
-    <Suspense fallback={<div className="min-h-screen bg-slate-950 text-white flex items-center justify-center font-mono text-sm">Cargando Studio...</div>}>
+    <Suspense fallback={<div className="min-h-screen bg-slate-950 text-white flex items-center justify-center font-mono text-sm">Cargando SQL Schemer Studio...</div>}>
       <ConverterContent />
     </Suspense>
   );
